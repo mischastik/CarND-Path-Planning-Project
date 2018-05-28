@@ -249,17 +249,25 @@ int main() {
 			{
 				car_s = end_path_s;
 			}
-
+			// We have three criteria for our driving decision:
+			// - is my lane free: drive on
+			// - is my lane blocked, check the neighboring lanes
+			// -- are both blocked: slow down
+			// -- is one of the free: take it
+			// -- if both are free, take the one with the most space in front.
 			bool too_close = false;
 			bool my_lane_free = true;
 			bool left_lane_free = true;
 			bool right_lane_free = true;
-
+			double left_lane_score = 1000;
+			double right_lane_score = 1000;
 			for (int i = 0; i < sensor_fusion.size(); i++)
 			{
 				float d = sensor_fusion[i][6];
+				// check if car is in my lane or one of the neighboring ones
 				for (int check_lane = lane - 1; check_lane <= lane + 1; ++check_lane)
 				{
+					// this is not a valid line so we don't need to check
 					if (check_lane < 0)
 					{
 						left_lane_free = false;
@@ -277,27 +285,56 @@ int main() {
 						double check_speed = sqrt(vx * vx + vy * vy);
 						double check_car_s = sensor_fusion[i][5];
 						check_car_s += (double)prev_size * 0.02 * check_speed;
+						// check if the vehicle is near me in front or behind
 						bool blocked_from_behind = false;
 						bool blocked_in_front = false;
 						if ((check_car_s < car_s) && (car_s - check_car_s) < 10)
 						{
 							blocked_from_behind = true;
 						}
-						if ((check_car_s > car_s) && (check_car_s - car_s) < 30)
+						// the further the closest car in this lane is ahead of me, the better the score
+						double lane_score = check_car_s - car_s;
+						if ((check_car_s > car_s) && lane_score < 30)
 						{
 							blocked_in_front = true;
 						}
+						// if car is behind, assign a huge score because we won't get stuck behind it.
+						if (check_car_s < car_s)
+						{
+							lane_score = 1000;
+						}
+							
 						if (check_lane == lane && blocked_in_front)
 						{
 							my_lane_free = false;
 						}
-						if (check_lane == lane - 1 && (blocked_from_behind || blocked_in_front))
+						if (check_lane == lane - 1)
 						{
-							left_lane_free = false;
+							if ((blocked_from_behind || blocked_in_front))
+							{
+								left_lane_free = false;
+							}
+							else
+							{
+								if (lane_score < left_lane_score)
+								{
+									left_lane_score = lane_score;
+								}
+							}
 						}
 						if (check_lane == lane + 1 && (blocked_from_behind || blocked_in_front))
 						{
-							right_lane_free = false;
+							if ((blocked_from_behind || blocked_in_front))
+							{
+								right_lane_free = false;
+							}
+							else
+							{
+								if (lane_score < right_lane_score)
+								{
+									right_lane_score = lane_score;
+								}
+							}
 						}
 					}
 				}
@@ -308,7 +345,18 @@ int main() {
 				{
 					too_close = true;
 				}
-				// TODO: Calculate a score for the left and right lanes and choose the better one.
+				// If left and right are free, choose the one with the higher score.
+				else if (left_lane_free && right_lane_free)
+				{
+					if (left_lane_score > right_lane_score)
+					{
+						lane--;
+					}
+					else
+					{
+						lane++;
+					}
+				}
 				else if (left_lane_free)
 				{
 					lane--;
