@@ -251,29 +251,71 @@ int main() {
 			}
 
 			bool too_close = false;
+			bool my_lane_free = true;
+			bool left_lane_free = true;
+			bool right_lane_free = true;
 
 			for (int i = 0; i < sensor_fusion.size(); i++)
 			{
 				float d = sensor_fusion[i][6];
-				if (d < 2 + 4 * lane + 2 && d > 2 + 4 * lane - 2)
+				for (int check_lane = lane - 1; check_lane <= lane + 1; ++check_lane)
 				{
-					double vx = sensor_fusion[i][3];
-					double vy = sensor_fusion[i][4];
-					double check_speed = sqrt(vx*vx + vy * vy);
-					double check_car_s = sensor_fusion[i][5];
-					check_car_s += (double)prev_size * 0.02 * check_speed;
-					if ((check_car_s > car_s) && (check_car_s - car_s) < 30)
+					if (check_lane < 0)
 					{
-						too_close = true;
-						if (lane > 0)
+						left_lane_free = false;
+						continue;
+					}
+					else if (check_lane > 2)
+					{
+						right_lane_free = false;
+						continue;
+					}
+					if (d < 2 + 4 * check_lane + 2 && d > 2 + 4 * check_lane - 2)
+					{
+						double vx = sensor_fusion[i][3];
+						double vy = sensor_fusion[i][4];
+						double check_speed = sqrt(vx * vx + vy * vy);
+						double check_car_s = sensor_fusion[i][5];
+						check_car_s += (double)prev_size * 0.02 * check_speed;
+						bool blocked_from_behind = false;
+						bool blocked_in_front = false;
+						if ((check_car_s < car_s) && (car_s - check_car_s) < 10)
 						{
-							lane--;
+							blocked_from_behind = true;
 						}
-						else if (lane < 2)
+						if ((check_car_s > car_s) && (check_car_s - car_s) < 30)
 						{
-							lane++;
+							blocked_in_front = true;
+						}
+						if (check_lane == lane && blocked_in_front)
+						{
+							my_lane_free = false;
+						}
+						if (check_lane == lane - 1 && (blocked_from_behind || blocked_in_front))
+						{
+							left_lane_free = false;
+						}
+						if (check_lane == lane + 1 && (blocked_from_behind || blocked_in_front))
+						{
+							right_lane_free = false;
 						}
 					}
+				}
+			}
+			if (!my_lane_free)
+			{
+				if (!left_lane_free && !right_lane_free)
+				{
+					too_close = true;
+				}
+				// TODO: Calculate a score for the left and right lanes and choose the better one.
+				else if (left_lane_free)
+				{
+					lane--;
+				}
+				else if (right_lane_free)
+				{
+					lane++;
 				}
 			}
 
